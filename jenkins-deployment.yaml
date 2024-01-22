@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jenkins
+  namespace: devops-tools
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jenkins-server
+  template:
+    metadata:
+      labels:
+        app: jenkins-server
+    spec:
+      securityContext:
+            fsGroup: 1000
+            runAsUser: 1000
+      serviceAccountName: jenkins-admin
+      containers:
+        - name: jenkins
+          image: jenkins/jenkins:lts
+          # Resouce Limits
+          resources:
+            limits:
+              memory: "2000Mi"
+              cpu: "1000m"
+          # Resource Rewuested
+            requests:
+              memory: "1000Mi"
+              cpu: "1000m"
+          ports:
+            - name: httpport
+              containerPort: 8080
+            - name: jnlpport
+              containerPort: 50000
+          livenessProbe:
+            httpGet:
+              path: "/login"
+              port: 8080
+            initialDelaySeconds: 300
+            periodSeconds: 60
+            timeoutSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: "/login"
+              port: 8080
+            initialDelaySeconds: 300
+            periodSeconds: 60
+            timeoutSeconds: 30
+            failureThreshold: 3
+          volumeMounts:
+            - name: jenkins-data
+              mountPath: /var/jenkins_home
+            - name: jenkins-shared
+              mountPath: /var/jenkins_shared
+        #   # Side-car containers to provide jenkis pod with env
+        #   # Add additional configuration for the Python container as needed
+        - name: python-sidecar
+          image: python:3.12
+          command: ["tail", "-f", "/dev/null"]
+          resources:
+            limits:
+              memory: "64Mi"
+              cpu: "64m"
+          volumeMounts:
+            - name: jenkins-shared
+              mountPath: /var/jenkins_shared
+        #   # Add additional configuration for the nodeJS container as needed
+        # - name: nodejs-sidecar
+        #   image: node:16
+        #   command: ["tail", "-f", "/dev/null"]
+        #   resources:
+        #     limits:
+        #       memory: "64Mi"
+        #       cpu: "64m"
+        #   # Add additional configuration for the Node.js container as needed
+      volumes:
+        - name: jenkins-data
+          persistentVolumeClaim:
+              claimName: jenkins-pv-claim
+        - name: jenkins-shared
+          emptyDir: {}
